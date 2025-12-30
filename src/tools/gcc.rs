@@ -1,5 +1,8 @@
 use super::{Archiver, CCompiler, CppCompiler};
-use crate::config::{CStandard, CppStandard, Distribution, OptimizationLevel};
+use crate::{
+    config::{CStandard, CppStandard, Distribution, OptimizationLevel},
+    tools::Linker,
+};
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -125,45 +128,6 @@ impl CCompiler for GccFlavorCCompiler {
             Err(String::from_utf8_lossy(&output.stderr).into_owned())
         }
     }
-
-    fn link_object_files(
-        &self,
-        object_files: &[PathBuf],
-        output_file: &Path,
-        settings: &super::LinkingSettings<'_>,
-    ) -> Result<(), String> {
-        let mut command = Command::new(&self.location);
-
-        if settings.distribution == Distribution::DynamicLibrary {
-            command.arg("-shared");
-        }
-
-        for object_file in object_files {
-            command.arg(object_file);
-        }
-
-        command.arg(format!("-o{}", output_file.display()));
-
-        for include in settings.includes {
-            command.arg(format!("-I{}", include));
-        }
-
-        for library_search_path in settings.library_search_paths {
-            command.arg(format!("-L{}", library_search_path));
-        }
-
-        for library in settings.libraries {
-            command.arg(format!("-l{}", library));
-        }
-
-        let output = command.output().unwrap();
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(String::from_utf8_lossy(&output.stderr).into_owned())
-        }
-    }
 }
 
 pub(crate) struct GccFlavorCppCompiler {
@@ -188,6 +152,8 @@ impl CppCompiler for GccFlavorCppCompiler {
         for additional_pre_argument in settings.additional_pre_arguments {
             command.arg(additional_pre_argument);
         }
+
+        command.args(&["-fdiagnostics-color=always"]);
 
         command.arg("-c");
 
@@ -253,7 +219,19 @@ impl CppCompiler for GccFlavorCppCompiler {
             Err(String::from_utf8_lossy(&output.stderr).into_owned())
         }
     }
+}
 
+pub(crate) struct GccFlavorLinker {
+    location: String,
+}
+
+impl GccFlavorLinker {
+    pub(crate) fn new(location: String) -> GccFlavorLinker {
+        Self { location }
+    }
+}
+
+impl Linker for GccFlavorLinker {
     fn link_object_files(
         &self,
         object_files: &[PathBuf],

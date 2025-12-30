@@ -3,7 +3,8 @@ use crate::{
     config::{CStandard, CppStandard, Distribution, Language},
     tools::{
         Archiver, CCompilationSettings, CCompiler, CppCompilationSettings, CppCompiler,
-        GccFlavorArchiver, GccFlavorCCompiler, GccFlavorCppCompiler, LinkingSettings,
+        GccFlavorArchiver, GccFlavorCCompiler, GccFlavorCppCompiler, GccFlavorLinker, Linker,
+        LinkingSettings,
     },
     Dependency, ProjectBuildError, SourceFileBuildError, BAKERY_BUILD_DIRECTORY,
     BAKERY_CACHE_DIRECTORY, BAKERY_HASHES_FILE, BUILD_CONFIGURATION_FILE,
@@ -93,6 +94,21 @@ impl Build {
                     Box::new(GccFlavorArchiver::new(ar_location.clone()));
 
                 archiver
+            })
+    }
+
+    fn create_linker(
+        &self,
+        toolchain_configuration: &ToolchainConfiguration,
+    ) -> Option<Box<dyn Linker>> {
+        toolchain_configuration
+            .gpp_location
+            .as_ref()
+            .map(|gpp_location| {
+                let cpp_compiler: Box<dyn Linker> =
+                    Box::new(GccFlavorLinker::new(gpp_location.clone()));
+
+                cpp_compiler
             })
     }
 
@@ -266,14 +282,22 @@ impl Build {
         c_compiler: &dyn CCompiler,
         cpp_compiler: &dyn CppCompiler,
         archiver: &dyn Archiver,
+        linker: &dyn Linker,
     ) -> Result<(), ProjectBuildError> {
         for dependency in &project.dependencies {
             if let Dependency::Project(subproject) = dependency {
-                self.build_dependencies(subproject, c_compiler, cpp_compiler, archiver)?;
+                self.build_dependencies(subproject, c_compiler, cpp_compiler, archiver, linker)?;
 
                 let sources = self.collect_sources_to_compile(subproject);
 
-                self.build(subproject, sources, c_compiler, cpp_compiler, archiver)?;
+                self.build(
+                    subproject,
+                    sources,
+                    c_compiler,
+                    cpp_compiler,
+                    archiver,
+                    linker,
+                )?;
             }
         }
 
@@ -287,6 +311,7 @@ impl Build {
         c_compiler: &dyn CCompiler,
         cpp_compiler: &dyn CppCompiler,
         archiver: &dyn Archiver,
+        linker: &dyn Linker,
     ) -> Result<(), ProjectBuildError> {
         println!("Building {}", project.name);
 
@@ -434,7 +459,7 @@ impl Build {
 
                         match project.language {
                             Language::C => {
-                                c_compiler
+                                linker
                                     .link_object_files(
                                         &object_files,
                                         &absolute_output_file_path,
@@ -443,7 +468,7 @@ impl Build {
                                     .map_err(ProjectBuildError::LinkageError)?;
                             }
                             Language::Cpp => {
-                                cpp_compiler
+                                linker
                                     .link_object_files(
                                         &object_files,
                                         &absolute_output_file_path,
@@ -460,7 +485,7 @@ impl Build {
 
                         match project.language {
                             Language::C => {
-                                c_compiler
+                                linker
                                     .link_object_files(
                                         &object_files,
                                         &absolute_output_file_path,
@@ -469,7 +494,7 @@ impl Build {
                                     .map_err(ProjectBuildError::LinkageError)?;
                             }
                             Language::Cpp => {
-                                cpp_compiler
+                                linker
                                     .link_object_files(
                                         &object_files,
                                         &absolute_output_file_path,
@@ -568,7 +593,7 @@ impl Task for Build {
         &[]
     }
 
-    fn on_execute(&mut self, context: &TaskContext) {
+    fn on_execute(&mut self, context: &TaskContext) -> Result<(), ()> {
         let project = &context.project;
         let toolchain_configuration = &context.toolchain_configuration;
 
@@ -577,7 +602,7 @@ impl Task for Build {
             None => {
                 eprintln!("C compiler not found");
 
-                return;
+                return Err(());
             }
         };
         let cpp_compiler = match self.create_cpp_compiler(toolchain_configuration) {
@@ -585,7 +610,7 @@ impl Task for Build {
             None => {
                 eprintln!("C++ compiler not found");
 
-                return;
+                return Err(());
             }
         };
         let archiver = match self.create_archiver(toolchain_configuration) {
@@ -593,7 +618,16 @@ impl Task for Build {
             None => {
                 eprintln!("Archiver not found");
 
-                return;
+                return Err(());
+            }
+        };
+
+        let linker = match self.create_linker(toolchain_configuration) {
+            Some(linker) => linker,
+            None => {
+                eprintln!("Linker not found");
+
+                return Err(());
             }
         };
 
@@ -602,13 +636,13 @@ impl Task for Build {
         if sources.is_empty() {
             println!("Nothing to build");
 
-            return;
+            return Ok(());
         }
 
         if let Err(err) = self.create_directories(project) {
             eprintln!("Failed to create directories: {}", err);
 
-            return;
+            return Err(());
         }
 
         if !project.dependencies.is_empty() {
@@ -619,6 +653,7 @@ impl Task for Build {
                 c_compiler.as_ref(),
                 cpp_compiler.as_ref(),
                 archiver.as_ref(),
+                linker.as_ref(),
             ) {
                 Ok(_) => {
                     println!("Built dependencies");
@@ -626,7 +661,7 @@ impl Task for Build {
                 Err(err) => {
                     eprintln!("Failed to build dependencies: {}", err);
 
-                    return;
+                    return Err(());
                 }
             }
         }
@@ -637,13 +672,35 @@ impl Task for Build {
             c_compiler.as_ref(),
             cpp_compiler.as_ref(),
             archiver.as_ref(),
+            linker.as_ref(),
         ) {
             Ok(_) => {
                 if let Err(err) = self.copy_artifacts_to_build_directory(project) {
                     eprintln!("Failed to copy artifacts to build directory: {}", err);
+                    Err(())
+                } else {
+                    Ok(())
                 }
             }
-            Err(err) => eprintln!("{}", err),
+            Err(err) => {
+                if let ProjectBuildError::CompilationError(errors) = err {
+                    eprintln!("Build failed with {} error(s):", errors.len());
+
+                    for (i, error) in errors.iter().enumerate() {
+                        match error {
+                            SourceFileBuildError::FailedToCompile(msg) => {
+                                eprintln!("---- Error {} ----", i + 1);
+                                eprintln!("{}", msg);
+                            }
+                            _ => eprintln!("{}", error),
+                        }
+                    }
+                } else {
+                    eprintln!("{}", err);
+                }
+
+                Err(())
+            }
         }
     }
 }

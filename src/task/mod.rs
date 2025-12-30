@@ -17,5 +17,5 @@ pub trait Task {
     fn id(&self) -> &'static str;
     fn dependencies(&self) -> &[&'static str];
 
-    fn on_execute(&mut self, context: &TaskContext);
+    fn on_execute(&mut self, context: &TaskContext) -> Result<(), ()>;
 }

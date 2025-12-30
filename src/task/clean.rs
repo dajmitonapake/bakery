@@ -35,15 +35,19 @@ impl Task for Clean {
         &[]
     }
 
-    fn on_execute(&mut self, context: &super::TaskContext) {
+    fn on_execute(&mut self, context: &super::TaskContext) -> Result<(), ()> {
         let base = context.project.base_path.clone();
 
         if let Err(err) = self.remove_cache(base.clone()) {
             eprintln!("Failed to clean project cache: {}", err);
+            return Err(());
         }
 
         if let Err(err) = self.remove_build(base.clone()) {
             eprintln!("Failed to clean project build: {}", err);
+            return Err(());
         }
+
+        Ok(())
     }
 }

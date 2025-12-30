@@ -109,7 +109,10 @@ fn execute_task_and_its_dependencies(
     }
 
     for task_id in result_stack.into_iter().unique() {
-        tasks.get_mut(task_id).unwrap().on_execute(context);
+        if let Err(_) = tasks.get_mut(task_id).unwrap().on_execute(context) {
+            eprintln!("Failed to execute task {}", task_id);
+            return;
+        }
     }
 }
 
@@ -165,8 +168,9 @@ mod tests {
                 &["task2", "task3"]
             }
 
-            fn on_execute(&mut self, _context: &TaskContext) {
+            fn on_execute(&mut self, _context: &TaskContext) -> Result<(), ()> {
                 self.steps.borrow_mut().push(1);
+                Ok(())
             }
         }
 
@@ -183,8 +187,9 @@ mod tests {
                 &["task3"]
             }
 
-            fn on_execute(&mut self, _context: &TaskContext) {
+            fn on_execute(&mut self, _context: &TaskContext) -> Result<(), ()> {
                 self.steps.borrow_mut().push(2);
+                Ok(())
             }
         }
 
@@ -201,8 +206,9 @@ mod tests {
                 &["task4"]
             }
 
-            fn on_execute(&mut self, _context: &TaskContext) {
+            fn on_execute(&mut self, _context: &TaskContext) -> Result<(), ()> {
                 self.steps.borrow_mut().push(3);
+                Ok(())
             }
         }
 
@@ -219,8 +225,9 @@ mod tests {
                 &[]
             }
 
-            fn on_execute(&mut self, _context: &TaskContext) {
+            fn on_execute(&mut self, _context: &TaskContext) -> Result<(), ()> {
                 self.steps.borrow_mut().push(4);
+                Ok(())
             }
         }
 

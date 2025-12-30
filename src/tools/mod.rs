@@ -32,13 +32,6 @@ pub trait CCompiler: Send + Sync {
         output_file: &Path,
         settings: &CCompilationSettings<'_>,
     ) -> Result<(), String>;
-
-    fn link_object_files(
-        &self,
-        object_files: &[PathBuf],
-        output_file: &Path,
-        settings: &LinkingSettings<'_>,
-    ) -> Result<(), String>;
 }
 
 pub struct CppCompilationSettings<'a> {
@@ -59,13 +52,6 @@ pub trait CppCompiler: Send + Sync {
         output_file: &Path,
         settings: &CppCompilationSettings<'_>,
     ) -> Result<(), String>;
-
-    fn link_object_files(
-        &self,
-        object_files: &[PathBuf],
-        output_file: &Path,
-        settings: &LinkingSettings<'_>,
-    ) -> Result<(), String>;
 }
 
 pub struct LinkingSettings<'a> {
@@ -73,4 +59,13 @@ pub struct LinkingSettings<'a> {
     pub includes: &'a [String],
     pub libraries: &'a [String],
     pub library_search_paths: &'a [String],
+}
+
+pub trait Linker {
+    fn link_object_files(
+        &self,
+        object_files: &[PathBuf],
+        output_file: &Path,
+        settings: &LinkingSettings<'_>,
+    ) -> Result<(), String>;
 }

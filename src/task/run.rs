@@ -27,7 +27,7 @@ impl Task for Run {
         &["build"]
     }
 
-    fn on_execute(&mut self, context: &TaskContext) {
+    fn on_execute(&mut self, context: &TaskContext) -> Result<(), ()> {
         let project = &context.project;
 
         if project.distribution != Distribution::Executable {
@@ -46,6 +46,9 @@ impl Task for Run {
 
         if let Err(error) = command.status() {
             eprintln!("Failed to run the executable: {}", error);
+            Err(())
+        } else {
+            Ok(())
         }
     }
 }
