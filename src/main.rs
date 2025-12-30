@@ -21,14 +21,12 @@ use std::{
 };
 
 pub const BUILD_CONFIGURATION_FILE: &str = "bakery.toml";
+pub const BAKERY_PROJECT_TOOLCHAIN_FILE: &str = ".bakery/config.toml";
 pub const BAKERY_BUILD_DIRECTORY: &str = ".bakery/build";
 pub const BAKERY_CACHE_DIRECTORY: &str = ".bakery/cache";
 pub const BAKERY_HASHES_FILE: &str = ".bakery/cache/hashes.json";
 
 fn main() -> eyre::Result<()> {
-    let toolchain_configuration = deserialize_toolchain_configuration()
-        .context("Failed to deserialize toolchain configuration")?;
-
     let mut tasks: HashMap<&str, Box<dyn Task>> = HashMap::new();
 
     tasks.insert("build", Box::new(Build::new()));
@@ -44,6 +42,9 @@ fn main() -> eyre::Result<()> {
 
     match Project::open(".") {
         Ok(project) => {
+            let toolchain_configuration = deserialize_toolchain_configuration(&project)
+                .context("Failed to deserialize toolchain configuration")?;
+
             if let Some((subcommand, _parameters)) = matches.subcommand() {
                 if tasks.contains_key(subcommand) {
                     let context = TaskContext {
@@ -110,8 +111,13 @@ fn execute_task_and_its_dependencies(
     }
 }
 
-fn deserialize_toolchain_configuration() -> eyre::Result<ToolchainConfiguration> {
-    let toolchain_configuration_path = {
+fn deserialize_toolchain_configuration(project: &Project) -> eyre::Result<ToolchainConfiguration> {
+    let project_toolchain_configuration_path =
+        project.base_path.join(BAKERY_PROJECT_TOOLCHAIN_FILE);
+
+    let toolchain_configuration_path = if project_toolchain_configuration_path.exists() {
+        project_toolchain_configuration_path
+    } else {
         let mut executable_path = env::current_exe()?;
         executable_path.pop();
         executable_path.push("config.toml");
