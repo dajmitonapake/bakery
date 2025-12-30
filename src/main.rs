@@ -31,6 +31,7 @@ fn main() -> eyre::Result<()> {
 
     tasks.insert("build", Box::new(Build::new()));
     tasks.insert("run", Box::new(Run::new()));
+    tasks.insert("clean", Box::new(Clean::new()));
 
     let matches = Command::new("bakery")
         .version("0.1")
@@ -38,6 +39,7 @@ fn main() -> eyre::Result<()> {
         .about("Build system for C/C++")
         .subcommand(Command::new("build"))
         .subcommand(Command::new("run"))
+        .subcommand(Command::new("clean"))
         .get_matches();
 
     match Project::open(".") {

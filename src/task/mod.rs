@@ -1,7 +1,9 @@
 mod build;
+mod clean;
 mod run;
 
 pub use build::*;
+pub use clean::*;
 pub use run::*;
 
 use crate::{config::ToolchainConfiguration, Project};
