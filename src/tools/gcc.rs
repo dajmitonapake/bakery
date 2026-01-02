@@ -262,6 +262,8 @@ impl Linker for GccFlavorLinker {
             command.arg(format!("-l{}", library));
         }
 
+        command.arg("-lstdc++exp");
+
         let output = command.output().unwrap();
 
         if output.status.success() {
